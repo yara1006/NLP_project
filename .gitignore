@@ -1,0 +1,29 @@
+# Python cache & compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Data files & Info
+*.pkl
+info/
+
+# Media files
+pic/
+
+# VSCode
+.vscode/
+# Python Virtual Environments
+/nlp_venv/
+/venv/
+/.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
