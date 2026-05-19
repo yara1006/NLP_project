@@ -1,162 +1,241 @@
-# An LLM can Fool Itself: A Prompt-Based Adversarial Attack
+# NLP_project：中文诈骗文本对抗攻击与鲁棒性评估
 
-This is the source code for the ICLR 2024 paper "An LLM can Fool Itself: A Prompt-Based Adversarial Attack", <br>
-Xilie Xu* (NUS), Keyi Kong* (SDU), Ning Liu (SDU), Lizhen Cui (SDU), Di Wang (KAUST), Jingfeng Zhang (University of Auckland/RIKEN-AIP), Mohan Kankanhalli (NUS).
-<br> [[PDF]](https://arxiv.org/abs/2310.13345) [[Project Page]](https://godxuxilie.github.io/project_page/prompt_attack)
+本项目基于 PromptAttack 思路，面向中文诈骗通话文本分类任务，构建了从数据格式转换、中文文本对抗样本生成、分类模型训练，到鲁棒性评估的完整实验流程。项目同时支持本地 RoBERTa/BERT 分类器与通义千问 DashScope API 分类器，用于比较原始样本和对抗样本下模型的识别能力变化。
 
-We provide a [**Colab Tutorial**](https://colab.research.google.com/drive/19CeMMgMjTvbNj8GYv6uOYI-hgXopP0U6?usp=sharing) to help you quickly start to use our proposed PromptAttack!
+## 项目目标
 
-<div align="center">
-    <img src="pic/real.jpg" />
-</div>
+- 针对中文诈骗通话文本构建二分类任务：`非诈骗` / `诈骗`。
+- 微调中文 RoBERTa/BERT 分类模型，作为本地诈骗文本检测器。
+- 改造 PromptAttack，使其支持中文文本、中文分词和中文攻击提示。
+- 调用 Qwen/DashScope 生成对抗样本，模拟诈骗话术被改写后的检测绕过场景。
+- 评估原始文本与对抗文本上的准确率、攻击成功率（ASR）等指标。
 
-Logs of querying *ChatGPT*:
+## 项目结构
 
-- [PromptAttack against GPT-3.5 (left panel)](https://chat.openai.com/share/867be44f-0935-45a2-ae0d-7a725cf47c6b);
-- [GPT3.5&#39;s prediction of the original sample (right upper panel)](https://chat.openai.com/share/dcd812ac-b686-4ab7-b93a-de26e62cb364);
-- [GPT3.5&#39;s prediction of the adversarial sample (right lower panel)](https://chat.openai.com/share/93cbb22f-d9de-43c6-aa35-ecb3c722db19).
+```text
+NLP_project/
+├── Call.py                         # DashScope/Qwen API 调用与 SQLite 缓存
+├── PromptAttack.py                 # PromptAttack 主逻辑，已加入中文任务适配
+├── Predict.py                      # 基于 LLM 输出的标签解析预测器
+├── Dataset.py                      # HuggingFace Dataset 包装类
+├── train_bert_classifier.py        # 中文 RoBERTa/BERT 诈骗分类器训练脚本
+├── bert_classifier_predictor.py    # 本地分类器批量预测封装
+├── convert_data_format.py          # 原始 CSV 转 text/label 标准格式
+├── generate_adv_sentences.py       # 逐句生成中文对抗样本
+├── eval_adv.py                     # 对抗样本评估脚本
+├── eval_adv_llm.py                 # LLM/RoBERTa 双模式对抗评估
+├── eval_adv_dialogue.py            # 对话级原始/对抗/双边对抗评估
+├── eval_single_dialogue_file.py    # 单个对抗文件的 LLM 分类评估
+├── robustness_eval.py              # 原 PromptAttack 鲁棒性评估入口
+├── requirements.txt                # Python 依赖
+└── data/
+    ├── original_data/              # 中文诈骗通话原始数据
+    │   ├── trainResult.csv
+    │   ├── testResult.csv
+    │   └── test_small.csv
+    ├── sst-2.json                  # PromptAttack GLUE 对抗数据
+    ├── qnli.json
+    ├── qqp.json
+    ├── rte.json
+    ├── mnli-m.json
+    └── mnli-mm.json
+```
 
-<a href="#attack-gemini">Logs of querying *Gemini*</a> (Credit to [Yash](https://github.com/sinhayash)).
+## 核心模块说明
 
-## Environment
+### 1. 数据处理
+
+`convert_data_format.py` 将原始诈骗通话 CSV 转换为统一的 `text,label` 格式：
+
+- 输入字段：`specific_dialogue_content`、`is_fraud`
+- 输出字段：`text`、`label`
+- 标签映射：`False/0 -> 非诈骗`，`True/1 -> 诈骗`
+
+当前仓库数据位于 `data/original_data/`，部分脚本历史路径写作 `mydata/...`。如果直接运行相关脚本，需要根据实际目录调整路径，或将 `data/original_data` 复制/软链接为脚本期望的 `mydata/original_data`。
+
+### 2. 本地分类器训练
+
+`train_bert_classifier.py` 使用 HuggingFace Transformers 微调中文文本分类模型：
+
+- 默认预训练模型：`hfl/chinese-roberta-wwm-ext`
+- 最大长度：`160`
+- Batch size：`16`
+- Epochs：`3`
+- 输出目录：`roberta_classifier/`
+
+训练完成后会保存 tokenizer 和模型权重，可供 `bert_classifier_predictor.py`、`eval_adv_llm.py` 等评估脚本加载。
+
+### 3. 中文 PromptAttack 改造
+
+`PromptAttack.py` 在原始 PromptAttack 的基础上加入中文适配：
+
+- 支持 `lang="zh"` 参数切换中文攻击流程。
+- 使用 `jieba` 进行中文分词，替代英文 NLTK 分词。
+- 为 `mydata` 自定义数据集增加 `非诈骗` / `诈骗` 标签映射。
+- 构造中文攻击目标和攻击指导，要求模型在保持核心语义的同时生成更容易误导分类器的改写文本。
+- 支持词级修改比例、语义相似度、分类器预测结果等约束，用于筛选有效对抗样本。
+
+### 4. LLM 调用与缓存
+
+`Call.py` 封装 DashScope/Qwen 调用逻辑，并使用 SQLite 记录 prompt-response 缓存：
+
+- 减少重复 API 调用成本。
+- 支持失败重试和原始响应日志记录。
+- 默认使用 DashScope `Generation.call` 接口。
+
+建议通过环境变量传入密钥：
 
 ```bash
+export DASHSCOPE_API_KEY="your-api-key"
+```
+
+不要将真实 API Key 写入代码或提交到仓库。
+
+### 5. 对抗样本生成
+
+`generate_adv_sentences.py` 读取逐句对话数据，对诈骗样本生成对抗改写文本：
+
+- 输入：`mydata/convert_Data/{left|right}_dialogue_sentences.csv`
+- 输出：`mydata/new_{left|right}_adv/{side}_dialogue_sentences_adv_sample_strategy_0.csv`
+- 仅对诈骗样本执行攻击；非诈骗样本保留原文。
+- 支持断点续跑：如果输出文件已存在，会从已处理行数继续。
+
+### 6. 鲁棒性评估
+
+项目提供多个评估入口：
+
+- `eval_adv_llm.py`：比较原始样本和对抗样本在 Qwen 或 RoBERTa 分类器上的表现。
+- `eval_adv_dialogue.py`：按对话级别组装左右对话，支持原始、单边对抗、双边对抗三种评估模式。
+- `eval_single_dialogue_file.py`：对单个对抗文件进行 LLM 分类评估。
+
+核心指标：
+
+- `Original Accuracy`：原始样本分类准确率。
+- `Adversarial Accuracy`：对抗样本分类准确率。
+- `ASR`：Attack Success Rate，原始预测正确但对抗样本预测错误的比例。
+
+## 环境准备
+
+建议使用 Python 3.9+，并创建独立虚拟环境：
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## Let's Attack the LLM via PromptAttack
+如果在 Windows PowerShell 中使用：
 
-<div align="center">
-    <img src="pic/intro1.jpg" />
-</div>
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-We generate adversarial samples by querying the LLM via an attack prompt. The attack prompt consists of three key components: **original input (OI)**, **attack objective (AO)**, and **attack guidance (AG)**.
-We let $\mathcal{D}=\{(x_i,y_i)\}_{i=1}^N$ be the original test dataset consisting of $N \in \mathbb{N}$ data points.
+项目依赖包含 PyTorch、Transformers、Datasets、DashScope、BERTScore、jieba、pandas、scikit-learn 等。若安装 GPU 版本 PyTorch，请根据本机 CUDA 版本参考 PyTorch 官方安装命令。
 
-For each data point $(x,y)\in \mathcal{D}$, $x = \{ t^i, c^i\}_{i=1}^n$ is the original sample where $n \in \mathbb{N}$ is the number of sentences, $t^i$ refers to the type of $i$-th sentence, and $c^i$ refers to the content of $i$-th sentence. For example, the original input in QQP and MNLI can have two types of sentences (i.e., $n=2$). We follow the types defined in their datasets, e.g., $t^1$ being ``question1`` and $t^2$ being ``question2`` for QQP, $t^1$ being ``premise`` and $t^2$ being ``hypothesis`` for MNLI.
+## 快速运行
 
-### Original input (OI)
+### 1. 转换数据格式
 
-The OI converts a data point composed of the original sample and ground-truth label sampled from a dataset into a sentence of an attack prompt. Given a data point $(x,y) \in \mathcal{D}$, we can formulate the OI as follows:
-
-**The original $t^1c^1$ and $t^2c^2$ and $\dots$ and $t^nc^n$ is classified as $y^k$.**
-
-### Attack objective (AO)
-
-The adversarial textual attack aims to generate an adversarial sample that should keep the same semantic meaning as its original version and can fool the LLM into doing incorrect classification. Here, we assume PromptAttack can perturb only one type of sentence for each data point. Therefore, given a data point $(x,y)\in \mathcal{D}$ and the type of the sentence that is targeted to be perturbed $t^a \in \{t^1,\dots,t^n \}$ where $a \in \mathbb{N}$, we formulate the AO as follows:
-
-**Your task is to generate a new $t^a$ which must satisfy the following conditions: `<br>` 1.Keeping the semantic meaning of the new $t^a$ unchanged; `<br>` 2.The new $t^a$ and the original $t^1$, $\dots$, $t^{a-1}$, $t^{a+1}$, $\dots$, $t^n$, should be classified as $y^1$ or $\dots$ or $y^{k-1}$ or $y^{k+1}$ or $\dots$ or $y^{C}$.**
-
-### Attack guidance (AG)
-
-AG contains the perturbation instruction to guide the LLM on how to perturb the original sample and specifies the format of the generated text.  In the AG, we first ask the LLM to only perturb the type of the target sentence to finish the task. Then, we provide the perturbation instruction that guides the LLM on how to perturb the target sentence to generate the adversarial sample that fits the requirement of AO. Finally, we specify that the output of the LLM should only contain the newly generated sentence. Therefore, given a data point $(x,y)\in \mathcal{D}$ and the type of the target sentence $t^a$, we can formulate the AG as follows:
-
-**You can finish the task by modifying $t^a$ using the following guidance:`<br>`\#perturbation\_instruction `<br>`Only output the new $t^a$ without anything else.**
-
-| Perturbation level | Abbre. | \#perturbation\_instruction                                                                                     |
-| ------------------ | ------ | --------------------------------------------------------------------------------------------------------------- |
-| Character          | C1     | Choose at most two words in the sentence, and change them so that they have typos.                              |
-| Character          | C2     | Change at most two letters in the sentence.                                                                     |
-| Character          | C3     | Add at most two extraneous characters to the end of the sentence.                                               |
-| Word               | W1     | Replace at most two words in the sentence with synonyms.                                                        |
-| Word               | W2     | Choose at most two words in the sentence that do not contribute to the meaning of the sentence and delete them. |
-| Word               | W3     | Add at most two semantically neutral words to the sentence.                                                     |
-| Sentence           | S1     | Add a randomly generated short meaningless handle after the sentence, such as @fasuv3.                          |
-| Sentence           | S2     | Paraphrase the sentence.                                                                                        |
-| Sentence           | S3     | Change the syntactic structure of the sentence.                                                                 |
-
-### Script
-
-#### ChatGPT
+如需按脚本默认路径运行，可先准备 `mydata/testResult.csv`，然后执行：
 
 ```bash
-python robustness_eval.py \
-    --dataset SST-2\
-    --API_key YOUR_OPENAI_API_KEY\
-    --batch_size 32\
-    --few_shot\
-    --ensemble
+python convert_data_format.py
 ```
 
-#### Llama2 or other model
+如果使用当前仓库的 `data/original_data/testResult.csv`，请先修改脚本中的输入路径，或复制数据到脚本期望位置。
 
-You can deploy your api service following the github repo [API for Open LLMs](https://github.com/xusenlinzy/api-for-open-llm).
+### 2. 训练本地 RoBERTa 分类器
 
 ```bash
-python robustness_eval.py \
-    --dataset SST-2\
-    --API_base YOUR_LLM_SERVICE\
-    --API_key YOUR_OPENAI_API_KEY\
-    --batch_size 32\
-    --few_shot\
-    --ensemble
+python train_bert_classifier.py
 ```
 
-### PromptAttack-Generated Adversarial GLUE Dataset
+训练完成后会生成：
 
-PromptAttack-generated adversarial GLUE Dataset contains adversarial texts generated by PromptAttack against GPT-3.5 (version `GPT-3.5-turbo-0301`), which is provided in the [`data`](./data) folder. Please feel free to download and check it!
+```text
+roberta_classifier/
+├── config.json
+├── model.safetensors / pytorch_model.bin
+├── tokenizer.json
+└── tokenizer_config.json
+```
 
-***How to load our dataset?***
+### 3. 生成中文对抗样本
 
-First, you need to clone our GitHub. Then, if you would like to load adversarial texts of *Task* $\in$ \{`sst-2`, `mnli-m`, `mnli-mm`, `qnli`, `qqp`, `rte`\} generated by PromptAttack with *Perturbation_Instruction* $\in$ \{`C1`, `C2`, `C3`, `W1`, `W2`, `W3`, `S1`, `S2`, `S3`\} and *Strategy* $\in$ \{`zero-shot`, `few-shot`\}, please use the following script to retrieve the data:
+先设置 DashScope API Key：
 
 ```bash
-import json
-with open('./data/Task.json', 'r') as f:
-  data = json.load(f)[Perturbation_Instruction][Strategy]
+export DASHSCOPE_API_KEY="your-api-key"
 ```
 
-## Adversarial Examples
+然后运行：
 
-| Perturbation level | \<sample\>                                                                                                                                                                                                                                                                                              | Label->Prediction  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Character(C1)      | Original:less dizzying than just dizzy, the jaunt is practically over before it begins.<br />Adversarial:less dizzying than just dizxy, the jaunt is practically over before it begins.                                                                                                                 | negative->positive |
-| Character(C2)      | Original:unfortunately, it's not silly fun unless you enjoy really bad movies.<br />Adversarial:unfortunately, it's not silly fun unless you enjoy really sad movies.                                                                                                                                   | negative->positive |
-| Character(C3)      | Original:if you believe any of this, i can make you a real deal on leftover enron stock that will double in value a week from friday.<br />Adversarial:if you believe any of this, i can make you a real deal on leftover enron stock that will double in value a week from friday.:\)                  | negative->positive |
-| Word(W1)           | Original:the iditarod lasts for days - this just felt like it did.<br />Adversarial:the iditarod lasts for days - this simply felt like it did.                                                                                                                                                         | negative->positive |
-| Word(W2)           | Original:if you believe any of this, i can make you a real deal on leftover enron stock that will double in value a week from friday.<br />Adversarial:if you believe any of this, i can make you a real deal on leftover enron stock that will double in value a week.                                 | negative->positive |
-| Word(W3)           | Original:when leguizamo finally plugged an irritating character late in the movie.<br />Adversarial:when leguizamo finally effectively plugged an irritating character late in the movie.                                                                                                               | negative->positive |
-| Sentence(S1)       | Original:corny, schmaltzy and predictable, but still manages to be kind of heartwarming, nonetheless.<br />Adversarial:corny, schmaltzy and predictable, but still manages to be kind of heartwarming, nonetheless. @kjdjq2.                                                                            | positive->negative |
-| Sentence(S2)       | Original:green might want to hang onto that ski mask, as robbery may be the only way to pay for his next project.<br />Adversarial:green should consider keeping that ski mask, as it may provide the necessary means to finance his next project.                                                      | negative->positive |
-| Sentence(S3)       | Original:with virtually no interesting elements for an audience to focus on, chelsea walls is a triple-espresso endurance challenge.<br />Adversarial:despite lacking any interesting elements for an audience to focus on, chelsea walls presents an exhilarating triple-espresso endurance challenge. | negative->positive |
-
-
-
-## Attack [Gemini](https://ai.google.dev/)
-
-<a id='genimi'></a>
-
-### PromptAttack (Gemini logs are provided by [Yash](https://github.com/sinhayash).)
-
-<div align="center">
-    <img src="pic/example_promptattack.jpg" />
-</div>
-
-### Original Sample
-
-<div align="center">
-    <img src="pic/example_original.jpg" />
-</div>
-
-### Adversarial Sample
-
-<div align="center">
-    <img src="pic/example_adversarial.jpg" />
-</div>
-
-## BibTeX
-
-```
-@inproceedings{
-xu2024an,
-title={An {LLM} can Fool Itself: A Prompt-Based Adversarial Attack},
-author={Xilie Xu and Keyi Kong and Ning Liu and Lizhen Cui and Di Wang and Jingfeng Zhang and Mohan Kankanhalli},
-booktitle={The Twelfth International Conference on Learning Representations},
-year={2024},
-url={https://openreview.net/forum?id=VVgGbB9TNV}
-}
+```bash
+python generate_adv_sentences.py
 ```
 
-## Contact
+如需切换生成左侧或右侧对话样本，可修改脚本中的 `SIDES` 配置。
 
-Please drop an e-mail to <xuxilie@comp.nus.edu.sg> and <luxinyayaya@mail.sdu.edu.cn> if you have any enquiry.
+### 4. 评估对抗攻击效果
+
+使用 LLM 分类器：
+
+```bash
+python eval_adv_llm.py
+```
+
+使用本地 RoBERTa 分类器：
+
+```bash
+CLS_TYPE=roberta python eval_adv_llm.py
+```
+
+对话级评估示例：
+
+```bash
+python eval_adv_dialogue.py --step original --cls_type roberta
+python eval_adv_dialogue.py --step adversarial --cls_type roberta
+python eval_adv_dialogue.py --step calculate --attack_type asymmetric
+```
+
+## 数据说明
+
+### 中文诈骗文本数据
+
+`data/original_data/` 中包含中文诈骗通话数据：
+
+- `trainResult.csv`：训练集
+- `testResult.csv`：测试集
+- `test_small.csv`：小规模测试样本
+
+主要字段包括通话文本、交互策略、通话类型、诈骗标签、诈骗类型等。训练脚本主要使用：
+
+- `specific_dialogue_content`：文本内容
+- `is_fraud`：是否诈骗
+
+### PromptAttack GLUE 数据
+
+`data/*.json` 为 PromptAttack 生成的英文 GLUE 对抗数据，覆盖：
+
+- `SST-2`
+- `QNLI`
+- `QQP`
+- `RTE`
+- `MNLI-m`
+- `MNLI-mm`
+
+可用于复现实验或参考原 PromptAttack 数据格式。
+
+## 注意事项
+
+- 当前部分脚本仍保留历史路径 `mydata/...`，运行前需要确认数据目录是否匹配。
+- `requirements.txt` 较大，包含实验期间使用的完整环境，首次安装可能耗时较长。
+- `generate_adv_sentences.py` 涉及外部 API 调用，建议使用环境变量管理密钥，并避免提交真实 Key。
+- 训练本地 RoBERTa 分类器需要较多计算资源，推荐使用 GPU。
+- 对抗样本生成会产生 API 调用成本，建议先用小样本验证流程。
+
+## 项目来源与说明
+
+本项目参考 ICLR 2024 论文《An LLM can Fool Itself: A Prompt-Based Adversarial Attack》的 PromptAttack 方法，并在此基础上扩展到中文诈骗文本识别场景。原始 PromptAttack 关注通用 NLP 分类任务，本仓库重点放在中文场景下的大模型生成式对抗样本、诈骗文本分类器训练以及鲁棒性评估实验。
