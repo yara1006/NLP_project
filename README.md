@@ -6,115 +6,115 @@
 
 🌐 **[English](README_en.md)** | **[中文](README.md)**
 
-中文诈骗文本对抗攻击与鲁棒性评估系统。基于 [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) 扩展，使用 LLM 生成对抗样本、SQLite API 缓存和 RoBERTa 微调。 Adapts [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) with LLM-generated adversarial paraphrases, SQLite API caching, and RoBERTa fine-tuning.
+中文诈骗文本对抗攻击与鲁棒性评估系统。基于 [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) 扩展，使用 LLM 生成对抗样本、SQLite API 缓存和 RoBERTa 微调。
 
-> Based on: *An LLM can Fool Itself: A Prompt-Based Adversarial Attack* (ICLR 2024)
-
----
-
-## Overview
-
-This project builds a complete pipeline for evaluating the robustness of Chinese fraud telephone text classifiers against LLM-generated adversarial attacks:
-
-```
-Raw CSV Data → Data Conversion → RoBERTa Training → Adversarial Generation → Robustness Evaluation
-```
-
-**Key results:**
-- RoBERTa original accuracy: ~92%
-- Adversarial accuracy (after LLM attack): ~65%
-- Attack Success Rate (ASR): ~29%
-- BERTScore similarity: >0.94
+> 基于论文：*An LLM can Fool Itself: A Prompt-Based Adversarial Attack* (ICLR 2024)
 
 ---
 
-## Project Structure
+## 项目概述
+
+本项目构建了完整的中文诈骗电话文本分类器鲁棒性评估流程，针对 LLM 生成的对抗攻击进行评估：
+
+```
+原始 CSV 数据 → 数据转换 → RoBERTa 训练 → 对抗样本生成 → 鲁棒性评估
+```
+
+**关键结果：**
+- RoBERTa 原始准确率：~92%
+- 对抗样本准确率（LLM 攻击后）：~65%
+- 攻击成功率（ASR）：~29%
+- BERTScore 相似度：>0.94
+
+---
+
+## 项目结构
 
 ```
 adv-fraud-nlp/
-├── src/                          # Core library
+├── src/                          # 核心库
 │   ├── __init__.py
-│   ├── Call.py                   # DashScope/Qwen API client + SQLite cache
-│   ├── PromptAttack.py           # Chinese-adapted PromptAttack (lang="zh")
-│   ├── Predict.py                # LLM output label parser
-│   ── Dataset.py                # HuggingFace Dataset wrapper
-├── scripts/                      # Executable scripts
-│   ├── train_bert_classifier.py  # RoBERTa fine-tuning
-│   ├── bert_classifier_predictor.py  # Batch prediction
-│   ├── convert_data_format.py    # CSV format conversion
-│   ├── generate_adv_sentences.py # Adversarial sample generation
-│   ├── eval_adv_llm.py           # LLM/RoBERTa dual-mode evaluation
-│   ├── eval_adv_dialogue.py      # Dialogue-level evaluation
-│   ├── eval_single_dialogue_file.py  # Single-file evaluation
-│   └── robustness_eval.py        # Original PromptAttack entry
+│   ├── Call.py                   # DashScope/Qwen API 客户端 + SQLite 缓存
+│   ├── PromptAttack.py           # 中文适配的 PromptAttack (lang="zh")
+│   ├── Predict.py                # LLM 输出标签解析器
+│   └── Dataset.py                # HuggingFace Dataset 封装
+├── scripts/                      # 可执行脚本
+│   ├── train_bert_classifier.py  # RoBERTa 微调
+│   ├── bert_classifier_predictor.py  # 批量预测
+│   ├── convert_data_format.py    # CSV 格式转换
+│   ├── generate_adv_sentences.py # 对抗样本生成
+│   ├── eval_adv_llm.py           # LLM/RoBERTa 双模式评估
+│   ├── eval_adv_dialogue.py      # 对话级评估
+│   ├── eval_single_dialogue_file.py  # 单文件评估
+│   └── robustness_eval.py        # 原始 PromptAttack 入口
 ├── tests/
-│   └── test_data.py              # Data conversion + cache tests
+│   └── test_data.py              # 数据转换 + 缓存测试
 ├── docs/
-│   ├── ARCHITECTURE.md           # System architecture & pipeline
-│   ├── RETROSPECTIVE.md          # Design decisions & lessons learned
-│   └── CLAUDE.md                 # Project rules for AI coding
+│   ├── ARCHITECTURE.md           # 系统架构与流程
+│   ├── RETROSPECTIVE.md          # 设计决策与经验教训
+│   └── CLAUDE.md                 # AI 编程协作项目规则
 ├── data/
-│   ├── original_data/            # Raw fraud call CSV data
-│   └── *.json                    # PromptAttack GLUE benchmark data
-├── pyproject.toml                # Project config & dependencies
-├── requirements.txt              # Legacy pip requirements
-└── LICENSE                       # MIT License
+│   ├── original_data/            # 原始诈骗电话 CSV 数据
+│   └── *.json                    # PromptAttack GLUE 基准数据
+├── pyproject.toml                # 项目配置与依赖
+├── requirements.txt              # 传统 pip 依赖
+└── LICENSE                       # MIT 许可证
 ```
 
 ---
 
-## Quick Start
+## 快速开始
 
-### 1. Install
+### 1. 安装
 
 ```bash
-# Clone and install
+# 克隆并安装
 git clone https://github.com/yara1006/adv-fraud-nlp.git
 cd adv-fraud-nlp
 pip install -e ".[dev]"
 ```
 
-### 2. Convert Data Format
+### 2. 转换数据格式
 
 ```bash
 python scripts/convert_data_format.py
 ```
 
-Converts raw fraud call CSV (`specific_dialogue_content`, `is_fraud`) to standard `text/label` format.
+将原始诈骗电话 CSV（`specific_dialogue_content`, `is_fraud`）转换为标准 `text/label` 格式。
 
-### 3. Train RoBERTa Classifier
+### 3. 训练 RoBERTa 分类器
 
 ```bash
 python scripts/train_bert_classifier.py
 ```
 
-Fine-tunes `hfl/chinese-roberta-wwm-ext` for binary fraud classification. Model saved to `roberta_classifier/`.
+微调 `hfl/chinese-roberta-wwm-ext` 进行二分类诈骗检测。模型保存到 `roberta_classifier/`。
 
-### 4. Generate Adversarial Samples
+### 4. 生成对抗样本
 
 ```bash
 export DASHSCOPE_API_KEY="your-api-key"
 python scripts/generate_adv_sentences.py
 ```
 
-Uses Qwen/DashScope to generate Chinese adversarial paraphrases for fraud samples.
+使用 Qwen/DashScope 为诈骗样本生成中文对抗改写文本。
 
-### 5. Evaluate Robustness
+### 5. 评估鲁棒性
 
 ```bash
-# LLM classifier mode
+# LLM 分类器模式
 python scripts/eval_adv_llm.py
 
-# RoBERTa classifier mode
+# RoBERTa 分类器模式
 CLS_TYPE=roberta python scripts/eval_adv_llm.py
 
-# Dialogue-level evaluation
+# 对话级评估
 python scripts/eval_adv_dialogue.py --step original --cls_type roberta
 python scripts/eval_adv_dialogue.py --step adversarial --cls_type roberta
 python scripts/eval_adv_dialogue.py --step calculate --attack_type asymmetric
 ```
 
-### 6. Run Tests
+### 6. 运行测试
 
 ```bash
 python -m pytest tests/ -v
@@ -122,63 +122,63 @@ python -m pytest tests/ -v
 
 ---
 
-## Core Concepts
+## 核心概念
 
-### Adversarial Attack via LLM Rewriting
+### 基于 LLM 改写的对抗攻击
 
-Instead of word-level perturbations (synonym replacement, character swap), this project uses LLM-generated paraphrases that:
-- Preserve core fraud intent
-- Change surface form to evade classifiers
-- Maintain semantic similarity (BERTScore >0.94)
+不同于词级别扰动（同义词替换、字符交换），本项目使用 LLM 生成的改写文本：
+- 保留核心诈骗意图
+- 改变表面形式以逃避分类器
+- 保持语义相似度（BERTScore >0.94）
 
-### Chinese PromptAttack Adaptation
+### 中文 PromptAttack 适配
 
-Original PromptAttack uses English GLUE tasks. This project adapts it for:
-- Chinese tokenization (`jieba` instead of NLTK)
-- Custom Chinese perturbation instructions
-- Fraud classification labels: `["非诈骗", "诈骗"]`
+原始 PromptAttack 使用英文 GLUE 任务。本项目适配：
+- 中文分词（使用 `jieba` 替代 NLTK）
+- 自定义中文扰动指令
+- 诈骗分类标签：`["非诈骗", "诈骗"]`
 
-### SQLite API Cache
+### SQLite API 缓存
 
-`Call.py` implements prompt-response caching to:
-- Reduce redundant API calls during experiment iteration
-- Support thread-safe parallel generation
-- Track cache hit rates for cost monitoring
-
----
-
-## Evaluation Metrics
-
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| Original Accuracy | Correct / Total | Model accuracy on non-attacked samples |
-| Adversarial Accuracy | Correct / Total | Model accuracy on adversarial samples |
-| ASR | (Orig - Adv) / Orig | Attack Success Rate |
-| BERTScore | F1 similarity | Semantic preservation between original and adversarial |
+`Call.py` 实现 prompt-response 缓存：
+- 减少实验迭代中的重复 API 调用
+- 支持线程安全的并行生成
+- 追踪缓存命中率以监控成本
 
 ---
 
-## Documentation
+## 评估指标
 
-- **[Architecture](docs/ARCHITECTURE.md)** — System pipeline, module descriptions, design decisions
-- **[Retrospective](docs/RETROSPECTIVE.md)** — Lessons learned, trade-offs, quantitative metrics
-- **[Project Rules](docs/CLAUDE.md)** — Coding standards, test requirements, environment setup
+| 指标 | 公式 | 说明 |
+|------|------|------|
+| 原始准确率 | 正确数 / 总数 | 模型在未攻击样本上的准确率 |
+| 对抗准确率 | 正确数 / 总数 | 模型在对抗样本上的准确率 |
+| ASR | (原始 - 对抗) / 原始 | 攻击成功率 |
+| BERTScore | F1 相似度 | 原始与对抗样本间的语义保持度 |
 
 ---
 
-## Requirements
+## 文档
+
+- **[架构说明](docs/ARCHITECTURE.md)** — 系统流程、模块说明、设计决策
+- **[复盘文档](docs/RETROSPECTIVE.md)** — 经验教训、权衡取舍、量化指标
+- **[项目规则](docs/CLAUDE.md)** — 编码规范、测试要求、环境配置
+
+---
+
+## 依赖要求
 
 - Python 3.9+
-- PyTorch 2.0+ (GPU recommended for training)
-- DashScope API key (for adversarial generation)
+- PyTorch 2.0+（训练推荐 GPU）
+- DashScope API key（对抗样本生成）
 
-Install dependencies:
+安装依赖：
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-Or use legacy requirements:
+或使用传统依赖：
 
 ```bash
 pip install -r requirements.txt
@@ -186,15 +186,15 @@ pip install -r requirements.txt
 
 ---
 
-## License
+## 许可证
 
-[MIT License](LICENSE)
+[MIT 许可证](LICENSE)
 
 ---
 
-## Citation
+## 引用
 
-If you use this project in your research, please cite the original PromptAttack paper:
+如果在研究中使用本项目，请引用原始 PromptAttack 论文：
 
 ```bibtex
 @inproceedings{zhang2024llm,
