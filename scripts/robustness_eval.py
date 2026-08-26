@@ -5,8 +5,8 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
-from Predict import Predict
-from PromptAttack import PromptAttack
+from src.Predict import Predict
+from src.PromptAttack import PromptAttack
 
 # It's good practice to handle system path modifications at the top
 import sys

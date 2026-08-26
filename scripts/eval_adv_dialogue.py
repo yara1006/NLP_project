@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from tqdm import tqdm
-from PromptAttack.Call import LLMCall
+from src.Call import LLMCall
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import argparse

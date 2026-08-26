@@ -4,7 +4,7 @@ import pandas as pd
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 import sys
-from PromptAttack.Call import LLMCall
+from src.Call import LLMCall
 
 # --- 配置 ---
 CONFIG = {

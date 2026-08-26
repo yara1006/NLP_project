@@ -38,7 +38,7 @@ class TestDataConversion:
         # Import the conversion function
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from convert_data_format import convert_csv
+        from scripts.convert_data_format import convert_csv
 
         output_file = str(tmp_path / "converted.csv")
         success = convert_csv(sample_fraud_csv, output_file)
@@ -54,7 +54,7 @@ class TestDataConversion:
         """Test that text content is preserved during conversion."""
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from convert_data_format import convert_csv
+        from scripts.convert_data_format import convert_csv
 
         output_file = str(tmp_path / "converted.csv")
         convert_csv(sample_fraud_csv, output_file)
@@ -67,7 +67,7 @@ class TestDataConversion:
         """Test handling of missing input file."""
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from convert_data_format import convert_csv
+        from scripts.convert_data_format import convert_csv
 
         output_file = str(tmp_path / "converted.csv")
         success = convert_csv("/nonexistent/path.csv", output_file)
@@ -77,7 +77,7 @@ class TestDataConversion:
         """Test handling of CSV with missing required columns."""
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from convert_data_format import convert_csv
+        from scripts.convert_data_format import convert_csv
 
         bad_csv = tmp_path / "bad.csv"
         df = pd.DataFrame({"wrong_col": ["text"]})
@@ -91,7 +91,7 @@ class TestDataConversion:
         """Test creating a small test subset."""
         import sys
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from convert_data_format import create_small_test_file
+        from scripts.convert_data_format import create_small_test_file
 
         # Create a source file with 10 rows
         source_file = tmp_path / "source.csv"
@@ -122,7 +122,7 @@ class TestLLMLogSql:
     def test_insert_and_query(self, tmp_path) -> None:
         """Test basic insert and query operations."""
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from Call import LLMLogSql
+        from src.Call import LLMLogSql
 
         db_file = str(tmp_path / "test_cache.db")
         log = LLMLogSql(db_file)
@@ -134,7 +134,7 @@ class TestLLMLogSql:
     def test_query_nonexistent(self, tmp_path) -> None:
         """Test querying a non-existent key returns None."""
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from Call import LLMLogSql
+        from src.Call import LLMLogSql
 
         db_file = str(tmp_path / "test_cache.db")
         log = LLMLogSql(db_file)
@@ -145,7 +145,7 @@ class TestLLMLogSql:
     def test_upsert(self, tmp_path) -> None:
         """Test that inserting the same key updates the value."""
         sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-        from Call import LLMLogSql
+        from src.Call import LLMLogSql
 
         db_file = str(tmp_path / "test_cache.db")
         log = LLMLogSql(db_file)
