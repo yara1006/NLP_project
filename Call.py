@@ -1,3 +1,9 @@
+"""LLM API client with SQLite-based prompt-response caching.
+
+Provides DashScope/Qwen API wrapper with automatic caching to reduce
+redundant API calls during adversarial sample generation experiments.
+"""
+from __future__ import annotations
 
 import time
 import dashscope
@@ -9,6 +15,11 @@ import logging
 import threading
 
 class LLMLogSql:
+    """SQLite-based prompt-response cache with thread-safe operations.
+
+    Uses a simple key-value table where the prompt is the primary key.
+    INSERT OR REPLACE ensures idempotent writes.
+    """
     def __init__(self, log_file) -> None:
         self.log_file = log_file
         conn = sqlite3.connect(log_file, check_same_thread=False)
@@ -20,7 +31,15 @@ class LLMLogSql:
         conn.commit()
         self.lock = threading.Lock()
 
-    def DBQuery(self, Q):
+    def DBQuery(self, Q: str) -> str | None:
+        """Query cached response for a given prompt.
+
+        Args:
+            Q: The prompt string to look up.
+
+        Returns:
+            Cached response string, or None if not found.
+        """
         with self.lock:
             conn = sqlite3.connect(self.log_file, check_same_thread=False)
             cursor = conn.cursor()
@@ -29,7 +48,13 @@ class LLMLogSql:
             conn.close()
         return result[0] if result else None
 
-    def DBInsert(self, Q, V):
+    def DBInsert(self, Q: str, V: str) -> None:
+        """Insert or update a prompt-response pair in the cache.
+
+        Args:
+            Q: The prompt string (primary key).
+            V: The response string to cache.
+        """
         with self.lock:
             conn = sqlite3.connect(self.log_file, check_same_thread=False)
             cursor = conn.cursor()
@@ -40,16 +65,39 @@ class LLMLogSql:
             conn.close()
 
 class LLMCall(LLMLogSql):
+    """DashScope/Qwen API wrapper with caching and retry logic.
+
+    Extends LLMLogSql to add API call functionality. On each query,
+    checks cache first; if miss, calls the API and caches the result.
+    """
     log_count: int = 0
     save_count: int = 0
 
-    def __init__(self, log_file, API_key, version, **kwargs) -> None:
+    def __init__(self, log_file: str, API_key: str, version: str, **kwargs) -> None:
+        """Initialize the LLM client.
+
+        Args:
+            log_file: Path to SQLite cache database.
+            API_key: DashScope API key.
+            version: Model version string (e.g., "qwen-turbo").
+        """
         super().__init__(log_file)
         # API_base is no longer needed for dashscope
         self.version = version
         dashscope.api_key = API_key
 
-    def call(self, prompt):
+    def call(self, prompt: str) -> str:
+        """Call the DashScope API with retry logic.
+
+        Retries on API errors or parsing failures with 2-second delays.
+        Logs raw responses and exceptions to api_debug.log.
+
+        Args:
+            prompt: The input prompt string.
+
+        Returns:
+            Response content string, or "ERROR_PARSING_RESPONSE" on failure.
+        """
         response = None
         while response is None:
             try:
@@ -93,7 +141,15 @@ class LLMCall(LLMLogSql):
             # Return a default value that indicates failure
             return "ERROR_PARSING_RESPONSE"
 
-    def query(self, prompt):
+    def query(self, prompt: str) -> str:
+        """Query with cache: check cache first, call API on miss.
+
+        Args:
+            prompt: The input prompt string.
+
+        Returns:
+            Response string from cache or API.
+        """
         # Caching logic remains the same
         if save_response := self.DBQuery(prompt):
             self.log_count += 1

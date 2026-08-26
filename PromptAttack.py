@@ -1,3 +1,11 @@
+"""Chinese-adapted PromptAttack for adversarial sample generation.
+
+Extends the original PromptAttack method (ICLR 2024) with Chinese language
+support using jieba tokenization and custom Chinese perturbation instructions.
+Supports fraud text classification task with label mapping ["非诈骗", "诈骗"].
+"""
+from __future__ import annotations
+
 import os
 import copy
 from .Call import LLMCall
@@ -13,20 +21,36 @@ import jieba  # 新增：用于中文分词，适配中文数据集
 
 
 class PromptAttack(LLMCall):
+    """Chinese-adapted PromptAttack for adversarial text generation.
+
+    Supports both English (lang="en") and Chinese (lang="zh") attack flows.
+    For Chinese tasks, uses jieba tokenization and custom perturbation
+    instructions designed for fraud text classification.
+    """
+
     def __init__(
         self,
-        log_file,
-        API_key,
-        API_base,
-        dataset,
-        label_list,
-        predictor,
-        version,
-        # 原始参数在此结束；为保持兼容性不删除原代码
-        # ) -> None:
-        # 新增可扩展参数 **kwargs（例如传入 lang="zh" 来启用中文流程）
+        log_file: str,
+        API_key: str,
+        API_base: str,
+        dataset: str,
+        label_list: list[str],
+        predictor: object,
+        version: str,
         **kwargs,
     ) -> None:
+        """Initialize PromptAttack with language and dataset configuration.
+
+        Args:
+            log_file: Path to SQLite cache database.
+            API_key: DashScope/Qwen API key.
+            API_base: API base URL (unused for DashScope, kept for compatibility).
+            dataset: Dataset name ("mydata" for Chinese fraud task).
+            label_list: List of label strings (e.g., ["非诈骗", "诈骗"]).
+            predictor: Classifier predictor object.
+            version: Model version string.
+            **kwargs: Additional options, including lang="zh" for Chinese mode.
+        """
         super().__init__(log_file, API_key, API_base)
         self.version = version
         self.dataset = dataset
