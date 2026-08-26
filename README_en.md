@@ -6,7 +6,7 @@
 
 🌐 **[English](README_en.md)** | **[中文](README.md)**
 
-中文诈骗文本对抗攻击与鲁棒性评估系统。基于 [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) 扩展，使用 LLM 生成对抗样本、SQLite API 缓存和 RoBERTa 微调。 Adapts [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) with LLM-generated adversarial paraphrases, SQLite API caching, and RoBERTa fine-tuning.
+Adversarial attack and robustness evaluation for Chinese fraud text classification. Adapts [PromptAttack](https://github.com/microsoft/promptbench) (ICLR 2024) with LLM-generated adversarial paraphrases, SQLite API caching, and RoBERTa fine-tuning.
 
 > Based on: *An LLM can Fool Itself: A Prompt-Based Adversarial Attack* (ICLR 2024)
 
@@ -37,7 +37,7 @@ adv-fraud-nlp/
 │   ├── Call.py                   # DashScope/Qwen API client + SQLite cache
 │   ├── PromptAttack.py           # Chinese-adapted PromptAttack (lang="zh")
 │   ├── Predict.py                # LLM output label parser
-│   ── Dataset.py                # HuggingFace Dataset wrapper
+│   └── Dataset.py                # HuggingFace Dataset wrapper
 ├── scripts/                      # Executable scripts
 │   ├── train_bert_classifier.py  # RoBERTa fine-tuning
 │   ├── bert_classifier_predictor.py  # Batch prediction
@@ -47,7 +47,7 @@ adv-fraud-nlp/
 │   ├── eval_adv_dialogue.py      # Dialogue-level evaluation
 │   ├── eval_single_dialogue_file.py  # Single-file evaluation
 │   └── robustness_eval.py        # Original PromptAttack entry
-├── tests/
+── tests/
 │   └── test_data.py              # Data conversion + cache tests
 ├── docs/
 │   ├── ARCHITECTURE.md           # System architecture & pipeline
